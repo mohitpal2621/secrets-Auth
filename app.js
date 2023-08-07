@@ -3,8 +3,9 @@ dotenv.config();
 import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 import ejs from "ejs";
-import md5 from "md5";
+const salt = bcrypt.genSaltSync(5);
 
 const app = express();
 
@@ -39,13 +40,16 @@ async function main() {
 
     app.post("/register", async (req, res) => {
         try {
+            const hashedPassword =  bcrypt.hashSync(req.body.password, salt);
+
             const usr = new User({
                 email: req.body.username,
-                password: md5(req.body.password)
+                password: hashedPassword
             });
 
             await usr.save();
-            res.render("secrets")
+            res.render("secrets");
+            console.log("Saved User");
         } catch (error) {
             console.log(error);
         }
@@ -54,14 +58,16 @@ async function main() {
     app.post("/login", async (req, res) => {
         try {
             const usrName = req.body.username;
-            const password = md5(req.body.password);
+            const password = req.body.password;
             
             const foundUser = await User.findOne({email: usrName})
 
             if(!foundUser){
                 console.log("User not found. Enter correct e-mail");
             } else {
-                if(foundUser.password === password){
+                if(bcrypt.compareSync(password, foundUser.password)){
+                    console.log(foundUser.password);
+                    console.log(password);
                     res.render("secrets");
                 } else {
                     console.log("Incorrect Password");
