@@ -6,7 +6,7 @@ import mongoose from "mongoose";
 import ejs from "ejs";
 import session from "express-session";
 import passport from "passport";
-import passportLocalMongoose from "passport-local-mongoose";;
+import passportLocalMongoose from "passport-local-mongoose";
 
 const app = express();
 
@@ -16,14 +16,15 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 main().catch(err => console.log(err));
 
-app.use(session({
+//Manage User Sessions
+app.use(session({           
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false
 }));
 
-app.use(passport.initialize());
-app.use(passport.session());
+app.use(passport.initialize()); //Initialize passport
+app.use(passport.session());    //Use passport to deal with sessions
 
 async function main() {
     await mongoose.connect('mongodb://127.0.0.1:27017/userDB');
@@ -33,14 +34,16 @@ async function main() {
         password: String
     });
 
+    //plugin passportLocalMongoose for facilitate hash and salting
     userSchema.plugin(passportLocalMongoose, { usernameField: "email"});
 
     const User = new mongoose.model('User', userSchema);
 
+    //Create Local Strategy to authenticate with email and password entered in form
     passport.use(User.createStrategy());
 
-    passport.serializeUser(User.serializeUser());
-    passport.deserializeUser(User.deserializeUser());
+    passport.serializeUser(User.serializeUser()); //To serialize user
+    passport.deserializeUser(User.deserializeUser()); //To deserialize user
     
     app.get("/", (req, res) => {
         res.render("home");
@@ -62,13 +65,15 @@ async function main() {
         }
     });
 
-    app.get("/logout", function(req,res) {
-        req.logout(function(err) {
-            if(err) {
-                console.log(err);
+    app.get("/logout", async (req,res) => {
+        req.logout((err) => {
+            if (err) {
+                console.error(err);
+                res.status(500).send("Logout failed");
+            } else {
+                res.redirect("/");
             }
         });
-        res.redirect("/");
     });
 
     app.post("/register", async (req, res) => {
@@ -88,7 +93,6 @@ async function main() {
         successRedirect: "/secrets",
         failureRedirect: "/login"
     }));
-    
 
     app.listen(3000, () => {
         console.log("Server started at port 3000");
