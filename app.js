@@ -7,6 +7,8 @@ import ejs from "ejs";
 import session from "express-session";
 import passport from "passport";
 import passportLocalMongoose from "passport-local-mongoose";
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import findOrCreate from "mongoose-findorcreate";
 
 const app = express();
 
@@ -31,22 +33,55 @@ async function main() {
 
     const userSchema = new mongoose.Schema({
         email: String,
-        password: String
+        password: String,
+        googleId: String
     });
 
     //plugin passportLocalMongoose for facilitate hash and salting
     userSchema.plugin(passportLocalMongoose, { usernameField: "email"});
+
+    //For using findOrCreate method on model
+    userSchema.plugin(findOrCreate);
 
     const User = new mongoose.model('User', userSchema);
 
     //Create Local Strategy to authenticate with email and password entered in form
     passport.use(User.createStrategy());
 
-    passport.serializeUser(User.serializeUser()); //To serialize user
-    passport.deserializeUser(User.deserializeUser()); //To deserialize user
+    passport.serializeUser(function(user, done) {
+        done(null, user);
+    });
+    
+    passport.deserializeUser(function(user, done) {
+        done(null, user);
+    });
+
+    //Create Google Strategy for authentication through passport
+    passport.use(new GoogleStrategy({
+        clientID: process.env.CLIENT_ID,
+        clientSecret: process.env.CLIENT_SECRET,
+        callbackURL: "http://localhost:3000/auth/google/secrets"
+      }, (accessToken, refreshToken, profile, cb) => {
+        console.log(profile);
+
+        User.findOrCreate({ googleId: profile.id }, (err, user) => {
+          return cb(err, user);
+        });
+      }
+    ));
     
     app.get("/", (req, res) => {
         res.render("home");
+    });
+
+    app.get("/auth/google",
+        passport.authenticate("google", { scope: [ "profile" ] })
+    );
+
+    app.get("/auth/google/secrets", passport.authenticate("google", 
+        { failureRedirect: "/login" }), (req, res) => {
+        console.log("This is the secrets route Authentication");
+        res.redirect("/secrets");
     });
 
     app.get("/login", (req, res) => {
@@ -65,7 +100,7 @@ async function main() {
         }
     });
 
-    app.get("/logout", async (req,res) => {
+    app.post("/logout", async (req,res) => {
         req.logout((err) => {
             if (err) {
                 console.error(err);
