@@ -37,7 +37,8 @@ async function main() {
         password: String,
         googleId: String,
         facebookId: String,
-        displayName: String
+        displayName: String,
+        Secret: Array
     });
 
     //plugin passportLocalMongoose for facilitate hash and salting
@@ -71,7 +72,6 @@ async function main() {
             clientSecret: process.env.FB_SECRET,
             callbackURL: "http://localhost:3000/auth/facebook/secrets"
         },(accessToken, refreshToken, profile, cb) => {
-                console.log(profile);
                 User.findOrCreate({ facebookId: profile.id, displayName: profile.displayName }, (err, user) => {
                 return cb(err, user);
             });
@@ -112,34 +112,21 @@ async function main() {
         res.redirect("/secrets");
     });
 
-    app.get("/login", (req, res) => {
+
+    app.route("/login").get((req, res) => {
         res.render("login");
-    });
+    })
+    .post(passport.authenticate("local", {
+        successRedirect: "/secrets",
+        failureRedirect: "/login"
+    }));
 
-    app.get("/register", (req, res) => {
+
+    
+    app.route("/register").get((req, res) => {
         res.render("register");
-    });
-
-    app.get("/secrets", (req, res) => {
-        if (req.isAuthenticated()){
-            res.render("secrets");
-        } else {
-            res.redirect("/login");
-        }
-    });
-
-    app.post("/logout", async (req,res) => {
-        req.logout((err) => {
-            if (err) {
-                console.error(err);
-                res.status(500).send("Logout failed");
-            } else {
-                res.redirect("/");
-            }
-        });
-    });
-
-    app.post("/register", async (req, res) => {
+    })
+    .post(async (req, res) => {
         try {
             await User.register({ email: req.body.email }, req.body.password);
             const authenticate = await passport.authenticate("local");
@@ -152,10 +139,55 @@ async function main() {
         }
     });
 
-    app.post("/login", passport.authenticate("local", {
-        successRedirect: "/secrets",
-        failureRedirect: "/login"
-    }));
+    
+    app.route("/submit").get((req, res) => {
+        if(req.isAuthenticated()){
+            res.render("submit");
+        } else {
+            res.redirect("/login"); 
+        }
+    })
+    .post(async (req, res) => {
+        try {
+            const foundUser = await User.findById(req.user._id);
+            foundUser.Secret.push(req.body.secret);
+            await foundUser.save();
+            res.redirect("/secrets");
+        } catch (error) {
+            console.log(error);
+        }        
+    });
+    
+    
+    app.get("/secrets", async (req, res) => {
+        try {
+            if(req.isAuthenticated()){
+                const foundUsers = await User.find({Secret: {$ne:null}});   
+                if(foundUsers){
+                    res.render("secrets", {userWithSecrets: foundUsers})
+                } else{
+                    console.log("No users found with any secret");
+                }
+            } else {
+                res.redirect("/login");
+            }
+        } catch (error) {
+            console.log(error);
+        }
+    });
+
+
+
+    app.post("/logout", async (req,res) => {
+        req.logout((err) => {
+            if (err) {
+                console.error(err);
+                res.status(500).send("Logout failed");
+            } else {
+                res.redirect("/");
+            }
+        });
+    });
 
     app.listen(3000, () => {
         console.log("Server started at port 3000");
