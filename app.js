@@ -8,6 +8,7 @@ import session from "express-session";
 import passport from "passport";
 import passportLocalMongoose from "passport-local-mongoose";
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { Strategy as FacebookStrategy } from 'passport-facebook';
 import findOrCreate from "mongoose-findorcreate";
 
 const app = express();
@@ -34,7 +35,9 @@ async function main() {
     const userSchema = new mongoose.Schema({
         email: String,
         password: String,
-        googleId: String
+        googleId: String,
+        facebookId: String,
+        displayName: String
     });
 
     //plugin passportLocalMongoose for facilitate hash and salting
@@ -48,24 +51,41 @@ async function main() {
     //Create Local Strategy to authenticate with email and password entered in form
     passport.use(User.createStrategy());
 
-    passport.serializeUser(function(user, done) {
-        done(null, user);
+    //Code for serializing and deserializing session storage data
+    passport.serializeUser((user, done) => {
+        done(null, user.id);
     });
     
-    passport.deserializeUser(function(user, done) {
-        done(null, user);
+    passport.deserializeUser(async (id, cb) => {
+        try {
+            const user = await User.findById(id);
+            return cb(null, user);
+        } catch (error) {
+            return cb(error);
+        }
     });
+
+    //Create Facebook Strategy for authentication through passport
+    passport.use(new FacebookStrategy({
+            clientID: process.env.FB_ID,
+            clientSecret: process.env.FB_SECRET,
+            callbackURL: "http://localhost:3000/auth/facebook/secrets"
+        },(accessToken, refreshToken, profile, cb) => {
+                console.log(profile);
+                User.findOrCreate({ facebookId: profile.id, displayName: profile.displayName }, (err, user) => {
+                return cb(err, user);
+            });
+        }
+    ));
 
     //Create Google Strategy for authentication through passport
     passport.use(new GoogleStrategy({
-        clientID: process.env.CLIENT_ID,
-        clientSecret: process.env.CLIENT_SECRET,
-        callbackURL: "http://localhost:3000/auth/google/secrets"
+            clientID: process.env.CLIENT_ID,
+            clientSecret: process.env.CLIENT_SECRET,
+            callbackURL: "http://localhost:3000/auth/google/secrets"
       }, (accessToken, refreshToken, profile, cb) => {
-        console.log(profile);
-
-        User.findOrCreate({ googleId: profile.id }, (err, user) => {
-          return cb(err, user);
+            User.findOrCreate({ googleId: profile.id }, (err, user) => {
+            return cb(err, user);
         });
       }
     ));
@@ -74,13 +94,21 @@ async function main() {
         res.render("home");
     });
 
+    app.get("/auth/facebook",
+        passport.authenticate("facebook")
+    );
+
+    app.get("/auth/facebook/secrets", passport.authenticate("facebook", 
+        { failureRedirect: "/login" }), (req, res) => {
+        res.redirect("/secrets");
+    });
+
     app.get("/auth/google",
         passport.authenticate("google", { scope: [ "profile" ] })
     );
 
     app.get("/auth/google/secrets", passport.authenticate("google", 
         { failureRedirect: "/login" }), (req, res) => {
-        console.log("This is the secrets route Authentication");
         res.redirect("/secrets");
     });
 
