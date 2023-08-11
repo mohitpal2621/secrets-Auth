@@ -128,8 +128,10 @@ async function main() {
     })
     .post(async (req, res) => {
         try {
-            await User.register({ email: req.body.email }, req.body.password);
-            const authenticate = await passport.authenticate("local");
+            await User.register({ email: req.body.email }, req.body.password);  
+            const authenticate = await passport.authenticate("local");  
+            //.authenticate() not for authenticating per se, 
+            //but for establishing connection for the new user
             authenticate(req, res, () => {
                 res.redirect("/secrets");
             });
